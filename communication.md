@@ -1,0 +1,1 @@
+## This document describes the communication protocol used by FooBar
