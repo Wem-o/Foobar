@@ -3,7 +3,7 @@ FooBar, despite its name, it is more than a bar. The components are as follows (
 - Bar
 - Selector menu: similar to dmenu. Is able to select between user/script provided option 
   - Application launcher: same as selector but open apps
-  - Finder: same as selector but is able to search and open files, apps, text in files etc...
+  - Smart Finder: same as selector but is able to search and open files, apps, text in files etc...
 
 May also be added later:
 - File explorer

@@ -1,0 +1,19 @@
+[package]
+name = "fooselector"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+argpars.workspace = true
+thiserror.workspace = true
+
+
+iced.workspace = true
+iced_layershell.workspace = true
+softbuffer.workspace = true
+
+[build-dependencies]
+vergen.workspace = true
