@@ -1,8 +1,11 @@
 use argpars::{Argpars, ArgsObj};
+use iced_layershell::{reexport::{Anchor, KeyboardInteractivity}, settings};
 
 use crate::state::State;
 
 mod state;
+
+mod canvas;
 
 #[derive(Debug, Clone)]
 enum Mode {
@@ -86,14 +89,35 @@ fn main() -> Result<(), &'static str> {
 
     let mode = Mode::try_from(args)?;
 
-    println!("Mode is: {mode:#?}");
+    // println!("Starting in: {mode:?}");
 
-    // iced_layershell::application(
-    //     || State::new(mode), 
-    //     "Fooselector", 
-    //     State::update, 
-    //     State::view
-    // );
+
+    // This is needed so iced starts in tiny-skia (cpu rendered) mode.
+    // Without this canvas look very weird
+    unsafe {
+        std::env::set_var("ICED_BACKEND", "tiny-skia");
+    }
+
+    iced_layershell::application(
+        move || State::new(mode.clone()), 
+        "Fooselector", 
+        State::update, 
+        State::view
+    )
+        .settings(iced_layershell::Settings {
+            layer_settings: iced_layershell::settings::LayerShellSettings { 
+                anchor: Anchor::all(),
+                size: Some((800, 600)), 
+                keyboard_interactivity: KeyboardInteractivity::OnDemand, 
+                start_mode: settings::StartMode::Active, 
+                ..Default::default()
+            }, 
+            ..Default::default()
+        })
+        .theme(|state: &State| state.theme.clone())
+        .style(State::style)
+        .run()
+        .unwrap();
 
     Ok(())
 }

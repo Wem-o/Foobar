@@ -22,8 +22,6 @@ edition = "2024"
 version = "0.0.1-dev"
 license = "MIT"
 repository = "https://github.com/wem-o/foobar"
-description = "A waylannd bar and shell"
-readme = "README.md"
 
 [workspace.dependencies]
 
@@ -37,7 +35,7 @@ vergen = {version = "10.0.4", features = ["build", "cargo"]}
 # == Rendering ==
 # Using a pinned version because this commit patches an issue with canvas, but v15 didn't
 # yet come out
-iced = {version = "0.15.0-dev", git = "https://github.com/iced-rs/iced.git", rev = "c2646f6", default-features = false, features = ["debug", "fira-sans", "linux-theme-detection", "tiny-skia", "tokio", "svg", "canvas", "wayland"]}
+iced = {version = "0.15.0-dev", git = "https://github.com/iced-rs/iced.git", rev = "c2646f6", default-features = false, features = ["debug", "fira-sans", "linux-theme-detection", "tiny-skia", "tokio", "svg", "canvas", "advanced", "wayland"]}
 # Need the custom version for 0.15.0-dev version of iced
 iced_layershell = { version = "0.15.0-rc1", git = "https://github.com/Wem-o/exwlshelleventloop-modified", default-features = false, features = ["debug", "linux-theme-detection"]}
 # Dependency of iced, but to overwrite it later in patch.crates-io we need to specify it explicitly
