@@ -90,9 +90,9 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
             .unwrap()
             [0]; // Take the first line (kinda?)
 
-        let glyph_height = line_buffer.max_ascent + line_buffer.max_descent;
+        let glyph_height = line_buffer.max_descent +  line_buffer.max_descent;
         
-        let height = glyph_height
+        let height = (glyph_height * 2.0)
             + self.padding.top + self.padding.bottom 
             + self.inner_padding.top + self.inner_padding.bottom;
 
@@ -142,7 +142,6 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         );
 
         // == Draw the text inside the bar == 
-        // The bounding box for the text
         let text_size = size - self.inner_padding.into();
         let text_origin: Point = Point::new(
             boundary.x + self.inner_padding.left,
@@ -152,7 +151,7 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
 
         renderer.fill_paragraph(
             state.paragraph.raw(),
-            text_origin,
+            text_origin, // + iced::Vector::new(0.0, text_size.height / 2.0)
             self.text_color.unwrap_or(theme.palette().text), 
             text_bounds
         );

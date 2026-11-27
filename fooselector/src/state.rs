@@ -49,7 +49,8 @@ impl State {
 
         let searchbar = Searchbar {
             content: "".into(),
-            placeholder: "Start typing".into(),
+            // placeholder: "The quick brown fox jumps over the lazy dog üóúűáé".into(),
+            placeholder: "すばしっこい茶色のキツネが、のんびりした犬を飛び越えます。".into(),
 
             text_color: Some(Color::BLACK),
             font: None,
