@@ -1,21 +1,21 @@
 //! This module implements a searchbar using canvas. 
 
-use std::cell::{Cell, RefCell};
-
 use iced::{
-    Border, Color, Element, Font, Length, Padding, Pixels, Point, Rectangle, Renderer, Shadow, Size, Theme, advanced::{
-        Layout, Text, layout::Node, renderer::Quad, text::{
-            self, Paragraph as _,
-            Shaping, Wrapping
-        }, widget::{Operation, Tree, tree::{self, Tag}}
-    }, widget::{
-        canvas::{self, Stroke}, 
-        text::LineHeight
-    }
+    Border, Color, Element, Font, Length, Padding, Pixels, Point,
+    Rectangle, Renderer, Shadow, Size, Theme, widget::text::LineHeight,
+    advanced::{
+        Text, layout::Node, renderer::Quad, 
+        text::paragraph::Plain, widget::tree::{self, Tag}
+    },
 };
 use iced::advanced::graphics::text::Paragraph;
 // Trait magic
 use iced::advanced::{Renderer as _, text::Renderer as _};
+
+#[derive(Debug, Default)]
+struct SearchbarState {
+    pub paragraph: Plain<Paragraph>
+}
 
 #[derive(Debug, Clone)]
 pub struct Searchbar {
@@ -40,12 +40,6 @@ pub struct Searchbar {
     pub padding: Padding,
     /// The padding between the the text and the bar
     pub inner_padding: Padding,
-
-    
-    // Internal stuff
-    pub text_height: Cell<Option<f32>>,
-    pub paragraph: RefCell<Option<Paragraph>>,
-    pub should_redraw: Cell<bool>,
 }
 
 impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar 
@@ -61,21 +55,49 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         limits: &iced::advanced::layout::Limits,
     ) -> iced::advanced::layout::Node
     {
-        // A shortcut to the persistent state
-        let state: &Self = tree.state.downcast_ref();
+        let bounds = limits.max();
         
-        let width = limits.max().width;
-        let mut height = state.text_height.get().unwrap_or(0_f32) 
+        // A shortcut to the persistent state
+        let state: &mut SearchbarState = tree.state.downcast_mut();
+
+        // A reference to either the placeholder or the content to render
+        let text: &str = if self.content.is_empty() 
+            {&self.placeholder} else {&self.content};
+        
+
+        let width = bounds.width;
+
+        let _ = state.paragraph.update( Text {
+            content: text.into(),
+            bounds: Size::new(width, f32::MAX),
+            size: self.font_size,
+            line_height: self.line_height,
+            font: self.font.unwrap_or(Font::DEFAULT),
+            wrapping: iced::widget::text::Wrapping::None,
+            align_x: iced::widget::text::Alignment::Left,
+            align_y: iced::alignment::Vertical::Top,
+            hint_factor: None,
+            shaping: iced::widget::text::Shaping::Auto
+        });
+
+        let line_buffer = &state
+            .paragraph // Take a paragraph (manager) 
+            .raw() // Take a raw paragraph 
+            .buffer() // Take it's raw buffer
+            .lines  
+            [0] // Take the first line
+            .layout_opt() // Take an option of its layout
+            .unwrap()
+            [0]; // Take the first line (kinda?)
+
+        let glyph_height = line_buffer.max_ascent + line_buffer.max_descent;
+        
+        let height = glyph_height
             + self.padding.top + self.padding.bottom 
             + self.inner_padding.top + self.inner_padding.bottom;
 
-        // Ensure the height never becomes 0
-        // (if height is 0, draw will not be called, and we cannot 
-        // determine the height of the text, so it'll never render)
-        if height == 0.0 {height = 1.0;}
-
-        println!("Layout is called! The width is {width} and the height is {height}");
-        println!("Layout is called! The text_height is {:?}", state.text_height.get());
+        // println!("Layout is called! The width is {width} and the height is {height}");
+        // println!("Layout is called! The text_height is {:?}", state.text_height.get());
         
         Node::new(Size::new(width, height))
     }
@@ -92,7 +114,7 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
     )
     {
         // A shortcut to the persistent state
-        let state: &Self = tree.state.downcast_ref();
+        let state: &SearchbarState = tree.state.downcast_ref();
         
         // The area after the padding is applied
         let size = Size::new(
@@ -120,10 +142,6 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         );
 
         // == Draw the text inside the bar == 
-        
-        // A reference to either the placeholder or the content to render
-        let text: &str = if self.content.is_empty() {&self.placeholder} else {&self.content};
-
         // The bounding box for the text
         let text_size = size - self.inner_padding.into();
         let text_origin: Point = Point::new(
@@ -132,29 +150,8 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         );
         let text_bounds = Rectangle::new(text_origin, text_size);
 
-        if state.paragraph.borrow().is_none() {
-            *state.paragraph.borrow_mut() = Some(
-                Paragraph::with_text(Text {
-                    content: text.into(),
-                    bounds: text_size,
-                    size: self.font_size,
-                    line_height: self.line_height,
-                    font: self.font.unwrap_or(Font::DEFAULT),
-                    wrapping: iced::widget::text::Wrapping::None,
-                    align_x: iced::widget::text::Alignment::Left,
-                    align_y: iced::alignment::Vertical::Top,
-                    hint_factor: None,
-                    shaping: iced::widget::text::Shaping::Auto
-                })
-            );
-        }
-        // Safe to unwrap: because of the last if it'll alway have a value
-        state.text_height.set(Some(
-            state.paragraph.borrow().as_ref().unwrap().min_height()
-        ));
-
         renderer.fill_paragraph(
-            state.paragraph.borrow().as_ref().unwrap(),
+            state.paragraph.raw(),
             text_origin,
             self.text_color.unwrap_or(theme.palette().text), 
             text_bounds
@@ -162,11 +159,11 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
     }
 
     fn tag(&self) -> iced::advanced::widget::tree::Tag {
-        Tag::of::<Self>()
+        Tag::of::<SearchbarState>()
     }
 
     fn state(&self) -> iced::advanced::widget::tree::State {
-        tree::State::new(self.clone())
+        tree::State::new(SearchbarState::default())
     }
 
     // fn operate(

@@ -1,4 +1,7 @@
-use iced::{Alignment, Color, Element, Length, Pixels, Task, Theme, border, widget::{Container, container, row, text::LineHeight, text_input}};
+use iced::{
+    Alignment, Color, Element, Length, Task, Theme, border, 
+    widget::{container, row}
+};
 use iced_layershell::to_layer_message;
 
 use crate::Mode;
@@ -12,9 +15,9 @@ pub enum Msg {
 
 pub struct State {
     pub theme: iced::Theme,
-    mode: Mode,
+    _mode: Mode,
 
-    input_buffer: String,
+    _input_buffer: String,
 
 }
 
@@ -22,8 +25,8 @@ impl State {
     pub fn new(mode: Mode) -> Self {
         Self {
             theme: iced::Theme::Dracula,
-            mode,
-            input_buffer: String::new(),
+            _mode: mode,
+            _input_buffer: String::new(),
         }
     }
 
@@ -59,10 +62,6 @@ impl State {
 
             padding: 0.0.into(),
             inner_padding: 0.0.into(),
-
-            should_redraw: std::cell::Cell::new(false),
-            text_height: std::cell::Cell::new(None),
-            paragraph: std::cell::RefCell::new(None)
         };
         
         return container(row![
