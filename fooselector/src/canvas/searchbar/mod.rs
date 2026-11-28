@@ -80,19 +80,20 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
             shaping: iced::widget::text::Shaping::Auto
         });
 
-        let line_buffer = &state
+        let glyph_height = state
             .paragraph // Take a paragraph (manager) 
             .raw() // Take a raw paragraph 
             .buffer() // Take it's raw buffer
-            .lines  
+            .lines 
             [0] // Take the first line
             .layout_opt() // Take an option of its layout
             .unwrap()
-            [0]; // Take the first line (kinda?)
-
-        let glyph_height = line_buffer.max_descent +  line_buffer.max_descent;
+            .iter()
+            .map(|line| line.max_ascent + line.max_descent)
+            .fold(0.0, f32::max)
+        ;
         
-        let height = (glyph_height * 2.0)
+        let height = glyph_height
             + self.padding.top + self.padding.bottom 
             + self.inner_padding.top + self.inner_padding.bottom;
 
@@ -151,7 +152,7 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
 
         renderer.fill_paragraph(
             state.paragraph.raw(),
-            text_origin, // + iced::Vector::new(0.0, text_size.height / 2.0)
+            text_origin,
             self.text_color.unwrap_or(theme.palette().text), 
             text_bounds
         );
