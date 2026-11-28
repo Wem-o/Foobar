@@ -1,26 +1,157 @@
-//! This module implements a searchbar using canvas. 
+//! This module implements a searchbar widget. 
+
+use std::range::RangeInclusive;
 
 use iced::{
-    Border, Color, Element, Font, Length, Padding, Pixels, Point,
-    Rectangle, Renderer, Shadow, Size, Theme, widget::text::LineHeight,
-    advanced::{
-        Text, layout::Node, renderer::Quad, 
-        text::paragraph::Plain, widget::tree::{self, Tag}
-    },
+    Border, Color, Element, Font, Length, Padding, Pixels, Point, Rectangle, Renderer, Shadow, Size, Theme, advanced::{
+        Text, layout::Node, renderer::Quad, text::{Paragraph as _, paragraph::Plain}, widget::tree::{self, Tag}
+    }, keyboard::{Modifiers, key::Named}, widget::text::LineHeight,
 };
 use iced::advanced::graphics::text::Paragraph;
 // Trait magic
 use iced::advanced::{Renderer as _, text::Renderer as _};
+use unicode_segmentation::UnicodeSegmentation;
+
+#[derive(Debug, Copy, Clone)]
+enum CursorState {
+    /// The cursor is selecting [`.0`; `.1`] area. If .2 is true that means 
+    /// that if the selection ends by pressing esacpe the cursor should be 
+    /// sent to the begining (the selection was started from the back).
+    Selecting(usize, usize, bool),
+    /// The cursor is before the `.0`th byte in the content
+    AtCharacter(usize)
+}
+impl Default for CursorState {
+    fn default() -> Self {
+        Self::AtCharacter(0)
+    }
+}
+impl CursorState {
+    pub fn character_entered(&self, length: usize) -> Self {
+        match self {
+            Self::AtCharacter(position) => Self::AtCharacter(position + length),
+            Self::Selecting(start, _, _) => Self::AtCharacter(start + length)
+        }
+    }
+
+    pub fn deleting(&self, is_backspace: bool, length: usize) -> Self {
+        match (self, is_backspace) {
+            (CursorState::AtCharacter(pos), true) => Self::AtCharacter(pos - length),
+            (CursorState::AtCharacter(_), false) => *self,
+            
+            (CursorState::Selecting(_, end, _), _) => 
+                Self::AtCharacter(*end - length)
+        }
+    }
+
+    /// Replicates the action when escape is pressed. This cancels any selection.
+    /// 
+    /// Note: due to this function getting no information about the 
+    /// string, it's the caller's responisbility to verify whether 
+    /// the set position is a valid utf8 position or grapheme.
+    pub fn escape_pressed(&self) -> Self {
+        match *self {
+            CursorState::AtCharacter(_) => *self,
+            CursorState::Selecting(start, end, selection_started_from_back) => {
+                if selection_started_from_back {Self::AtCharacter(start)}
+                else {Self::AtCharacter(end)}
+            }
+        }
+    }
+}
 
 #[derive(Debug, Default)]
 struct SearchbarState {
-    pub paragraph: Plain<Paragraph>
+    pub paragraph: Plain<Paragraph>,
+    content: String,
+    
+    pub cursor_state: CursorState,
+
+    text_max_width: f32
+}
+impl SearchbarState {
+    fn update_paragraph(&mut self, params: &Searchbar) -> bool {
+        self.paragraph.update( Text {
+            content: &self.content,
+            bounds: Size::new(self.text_max_width, f32::MAX),
+            size: params.font_size,
+            line_height: params.line_height,
+            font: params.font.unwrap_or(Font::DEFAULT),
+            wrapping: iced::widget::text::Wrapping::None,
+            align_x: iced::widget::text::Alignment::Left,
+            align_y: iced::alignment::Vertical::Top,
+            hint_factor: None,
+            shaping: iced::widget::text::Shaping::Auto
+        })
+    }
+    
+    fn keypress(&mut self, params: &Searchbar, str: &str) {
+        println!("key pressed: {str}");
+        
+        match self.cursor_state {
+            CursorState::AtCharacter(pos) => {
+                self.content.insert_str(pos, str);
+                self.cursor_state = self.cursor_state.character_entered(str.len());
+            }
+            CursorState::Selecting(start, end, _) => {
+                self.content.replace_range(start..end, str);
+                self.cursor_state = self.cursor_state.character_entered(str.len());
+            }
+        }
+
+        self.update_paragraph(params);
+    }
+
+    fn backspace(&mut self, params: &Searchbar) {
+        if self.content.is_empty() {return;}
+        
+        match self.cursor_state {
+            CursorState::AtCharacter(pos) => {
+                if pos == 0 {return;}
+                
+                let mut grapheme_bounds: Option<RangeInclusive<usize>> = None;
+                let mut grapheme_byte_position = 0_usize;
+                
+                for len in self.content
+                    .graphemes(true)
+                    .map(|grapheme| grapheme.len()) 
+                {
+                    if grapheme_byte_position == pos {break;}
+
+                    grapheme_bounds = Some(RangeInclusive 
+                        { start: grapheme_byte_position, last: grapheme_byte_position + len - 1 }
+                    );
+
+                    grapheme_byte_position += len;
+                }
+
+                let grapheme_bounds = grapheme_bounds.expect("Backspacing went wrong");
+                self.content.replace_range(
+                    grapheme_bounds,
+                    ""
+                );
+
+                self.cursor_state = self.cursor_state.deleting(
+                    true, 
+                    grapheme_bounds.last - grapheme_bounds.start + 1
+                )
+            }
+            CursorState::Selecting(_start, _end, _) => {
+                unimplemented!("Backspace while selecting");
+            }
+        }
+
+        self.update_paragraph(params);
+    }
+
+    fn escape_pressed(&mut self) {
+        self.cursor_state.escape_pressed();
+    }
 }
 
 #[derive(Debug, Clone)]
 pub struct Searchbar {
-    pub content: String,    
-    pub placeholder: String,
+    pub placeholder: &'static str,
 
     /// The color of the text. If none is given the theme's default
     /// is used
@@ -44,6 +175,14 @@ pub struct Searchbar {
 
 impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar 
 {
+    fn tag(&self) -> iced::advanced::widget::tree::Tag {
+        Tag::of::<SearchbarState>()
+    }
+
+    fn state(&self) -> iced::advanced::widget::tree::State {
+        tree::State::new(SearchbarState::default())
+    }
+    
     fn size(&self) -> Size<iced::Length> {
         Size { height: Length::Shrink, width: Length::Fill }
     }
@@ -61,11 +200,12 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         let state: &mut SearchbarState = tree.state.downcast_mut();
 
         // A reference to either the placeholder or the content to render
-        let text: &str = if self.content.is_empty() 
-            {&self.placeholder} else {&self.content};
+        let text: &str = if state.content.is_empty() 
+            {&self.placeholder} else {&state.content};
         
 
         let width = bounds.width;
+        state.text_max_width = width;
 
         let _ = state.paragraph.update( Text {
             content: text.into(),
@@ -80,17 +220,12 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
             shaping: iced::widget::text::Shaping::Auto
         });
 
-        let glyph_height = state
-            .paragraph // Take a paragraph (manager) 
-            .raw() // Take a raw paragraph 
-            .buffer() // Take it's raw buffer
-            .lines 
-            [0] // Take the first line
-            .layout_opt() // Take an option of its layout
-            .unwrap()
-            .iter()
-            .map(|line| line.max_ascent + line.max_descent)
-            .fold(0.0, f32::max)
+        let glyph_height: f32 = state
+            .paragraph
+            .raw()
+            .line_height()
+            .to_absolute(self.font_size)
+            .into()
         ;
         
         let height = glyph_height
@@ -150,31 +285,64 @@ impl<Message> iced::advanced::Widget<Message, Theme, Renderer> for Searchbar
         );
         let text_bounds = Rectangle::new(text_origin, text_size);
 
+        let mut color = self.text_color.unwrap_or(theme.palette().text);
+        if state.content.is_empty() {color.a = 0.65;}
+
         renderer.fill_paragraph(
             state.paragraph.raw(),
             text_origin,
-            self.text_color.unwrap_or(theme.palette().text), 
+            color, 
             text_bounds
         );
     }
 
-    fn tag(&self) -> iced::advanced::widget::tree::Tag {
-        Tag::of::<SearchbarState>()
-    }
+    fn update(
+        &mut self,
+        tree: &mut tree::Tree,
+        event: &iced::Event,
+        _layout: iced::advanced::Layout<'_>,
+        _cursor: iced::advanced::mouse::Cursor,
+        _renderer: &Renderer,
+        _clipboard: &mut dyn iced::advanced::Clipboard,
+        shell: &mut iced::advanced::Shell<'_, Message>,
+        _viewport: &Rectangle,
+    )
+    {
+        let state: &mut SearchbarState = tree.state.downcast_mut();
+        
+        if let iced::Event::Keyboard(kyb) = event 
+            && let iced::keyboard::Event::KeyPressed { 
+                modified_key: key, modifiers: mods,
+                key: _,  physical_key: _, location: _, 
+                text: _, repeat: _ } = kyb
+        {            
+            // Imported here to avoid confusion (iced likes to call different 
+            // struct the same thing)
+            use iced::keyboard::key::Key;
+            
+            match (key, *mods) {
+                // TODO! Close the whole app if esc is spammed
+                (Key::Named(Named::Escape), _) => state.escape_pressed(),
+                (Key::Named(Named::Space), _) => state.keypress(self, " "),
+                (Key::Named(Named::Backspace), _) => state.backspace(self),
 
-    fn state(&self) -> iced::advanced::widget::tree::State {
-        tree::State::new(SearchbarState::default())
-    }
+                //  Handle shortcuts with ctrl
+                (Key::Character(key), Modifiers::CTRL) => {
+                    match key.as_str() {
+                        // Common keycombination to jump to the start of the line
+                        "a" => state.cursor_state = CursorState::AtCharacter(0),
+                        _ => {}
+                    }
+                }
+                
+                (Key::Character(smolstr), _) => state.keypress(self, smolstr),
+                _ => {}
+            }
 
-    // fn operate(
-    //     &mut self,
-    //     _tree: &mut Tree,
-    //     layout: Layout<'_>,
-    //     _renderer: &Renderer,
-    //     operation: &mut dyn Operation,
-    // ) {
-    //     operation.text(None, layout.bounds(), &self.content);
-    // }
+            println!("The cursor is: {:?} editor buffer is: {}", state.cursor_state, state.content);
+            shell.request_redraw();
+        }
+    }
 }
 
 impl<Message> From<Searchbar> for Element<'_, Message> {
@@ -182,110 +350,3 @@ impl<Message> From<Searchbar> for Element<'_, Message> {
         Self::new(value)
     }
 }
-    
-//     fn draw(
-//         &self,
-//         state: &Self::State,
-//         renderer: &iced::Renderer,
-//         theme: &Theme,
-//         bounds: Rectangle,
-//         _cursor: Cursor,
-//     ) -> Vec<iced::widget::canvas::Geometry<iced::Renderer>>
-//     {
-//         let (cache) = state;
-// 
-//         if self.should_redraw.get() {
-//             cache.clear();
-//             self.should_redraw.set(false);
-//         }
-// 
-//         let geo = cache.draw_with_bounds(renderer, bounds, |frame| {
-//             // The area after the padding happened
-//             let size = Size::new(
-//                 frame.width() - self.padding.left - self.padding.right, 
-//                 frame.height() - self.padding.top - self.padding.bottom
-//             );
-//             let boundary = Rectangle::new(
-//                 Point::new(self.padding.left, self.padding.top),
-//                 size
-//             );
-// 
-//             // == Draw the box bounding the text (this will be the bar) ==
-//             let border_size = Size::new(self.border.width, self.border.width);
-//             let bar = canvas::Path::rounded_rectangle(
-//                 boundary.position() + iced::Vector::from(border_size / 2.0), 
-//                 size - border_size, 
-//                 self.border.radius
-//             );
-//             // Draw background
-//             frame.fill(
-//                 &bar, 
-//                 self.bar_color.unwrap_or(theme.palette().background)
-//             );
-// 
-//             // Draw border
-//             if self.border.width > 0.0 {
-//                 let bar = canvas::Path::rounded_rectangle(
-//                     boundary.position() + iced::Vector::from(border_size / 2.0_f32), 
-//                     // Subtract the size of the border from the space it'll take
-//                     // up from the rectangle. 
-//                     size - border_size,
-//                     self.border.radius
-//                 );
-//                 frame.stroke(&bar, Stroke {
-//                     width: self.border.width,
-//                     style: canvas::Style::Solid(self.border.color),
-//                     line_join: canvas::LineJoin::Round,
-//                     ..Default::default()
-//                 });
-//             }
-// 
-//             // == Draw the text inside the bar == 
-//             
-//             // A reference to either the placeholder or the content to render
-//             let text: &str = if self.content.is_empty() {&self.placeholder} else {&self.content};
-// 
-//             let text_size = size - self.inner_padding.into();
-//             let text_origin: Point = Point::new(
-//                 boundary.x + self.inner_padding.left,
-//                 boundary.y + self.inner_padding.top
-//             );
-//             let text_bounds = Rectangle::new(text_origin, text_size);
-// 
-//             // Welcome to hell
-//             let text_path = Paragraph::with_text(Text {
-//                 content: text.into(),
-//                 bounds: text_size,
-//                 size: self.font_size,
-//                 line_height: self.line_height,
-//                 font: self.font.unwrap_or(Font::DEFAULT),
-//                 wrapping: iced::widget::text::Wrapping::None,
-//                 align_x: iced::widget::text::Alignment::Left,
-//                 align_y: iced::alignment::Vertical::Center,
-//                 hint_factor: None,
-//                 shaping: iced::widget::text::Shaping::Advanced
-//             }); 
-//             self.text_height = Some(text_path.min_height());
-//             
-//             renderer.fill_paragraph(
-//                 &text_path, 
-//                 text_origin, 
-//                 self.text_color.unwrap_or(Color::BLACK), 
-//                 text_bounds
-//             );
-//             
-//             // {
-//             //     content: text.into(), 
-//             //     color: self.text_color.unwrap_or(theme.palette().text),
-//             //     font: self.font.unwrap_or(Font::DEFAULT),
-//             //     max_width: text_size.width,
-//             //     line_height: self.line_height,
-//             //     size: self.font_size,
-//             //     position: text_origin,
-//             //     ..Default::default()
-//             // };
-//             // frame.fill_text(text_path);
-//         });
-//         
-//         vec![geo]
-//     }

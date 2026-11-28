@@ -1,5 +1,6 @@
 use iced::{
-    Alignment, Color, Element, Length, Padding, Task, Theme, border, widget::{column, container, row}
+    Alignment, Color, Element, Length, Task, Theme, 
+    border, widget::{container, row}
 };
 use iced_layershell::to_layer_message;
 
@@ -31,14 +32,12 @@ impl State {
 
     pub fn view<'a>(&'a self) -> Element<'a, Msg> {
         let searchbar = Searchbar {
-            content: "".into(),
-            // placeholder: "The quick brown fox jumps over the lazy dog üóúűáé".into(),
-            placeholder: "he-- -- --".into(),
+            placeholder: "The quick brown fox jumps over the lazy dog üóúűáé".into(),
 
             text_color: Some(Color::BLACK),
             font: None,
             font_size: 30.into(),
-            line_height: 1.0.into(),
+            line_height: 1.35.into(),
 
             border: iced::Border { color: Color::from_rgb8(136, 57, 239), width: 1.0, radius: 10.0.into() },
             bar_color: Some(Color::WHITE),
@@ -48,27 +47,8 @@ impl State {
             inner_padding: 0.0.into(),
         };
         
-        let larp = Searchbar {
-            content: "".into(),
-            // placeholder: "The quick brown fox jumps over the lazy dog üóúűáé".into(),
-            placeholder: "he-- gq --".into(),
-
-            text_color: Some(Color::BLACK),
-            font: None,
-            font_size: 30.into(),
-            line_height: 1.0.into(),
-
-            border: iced::Border { color: Color::from_rgb8(136, 57, 239), width: 1.0, radius: 10.0.into() },
-            bar_color: Some(Color::WHITE),
-            box_shadow: None,
-
-            padding: 0.0.into(),
-            inner_padding: 0.0.into(),
-        };
-        
-        return container(column![
+        return container(row![
             searchbar,
-            larp,
         ])
         .style(|theme: &Theme| {
             container::Style::default()

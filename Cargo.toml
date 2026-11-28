@@ -41,6 +41,8 @@ iced_layershell = { version = "0.15.0-rc1", git = "https://github.com/Wem-o/exwl
 # Dependency of iced, but to overwrite it later in patch.crates-io we need to specify it explicitly
 softbuffer = {version = "=0.4.1"}
 
+unicode-segmentation = "1.13.3"
+
 [patch.crates-io]
 # Needed for transparent background 
 softbuffer = { git = "https://github.com/pop-os/softbuffer", tag = "cosmic-4.0" }

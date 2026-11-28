@@ -1060,6 +1060,7 @@ dependencies = [
  "iced_layershell",
  "softbuffer",
  "thiserror 2.0.21",
+ "unicode-segmentation",
  "vergen",
 ]
 

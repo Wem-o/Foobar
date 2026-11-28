@@ -116,6 +116,14 @@ fn main() -> Result<(), &'static str> {
         })
         .theme(|state: &State| state.theme.clone())
         .style(State::style)
+        .font(include_bytes!("../../assets/fonts/Ubuntu-Regular.ttf"))
+        // TODO!
+        .default_font(iced::Font { 
+            family: iced::font::Family::Name("Ubuntu"), 
+            weight: iced::font::Weight::Normal, 
+            stretch: iced::font::Stretch::Normal, 
+            style: iced::font::Style::Normal 
+        })
         .run()
         .unwrap();
 
